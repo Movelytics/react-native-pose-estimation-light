@@ -1,0 +1,92 @@
+{
+  "name": "@pose-tracker/react-native-pose-estimation-light",
+  "version": "0.1.0",
+  "description": "Human pose estimation SDK for React Native (light / online) — MoveNet Lightning via CDN + model URL each session, no bundled weights. iOS & Android (Expo Go). Optional API-key exercise engine.",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "source": "src/index.ts",
+  "react-native": "lib/index.js",
+  "files": [
+    "lib",
+    "src",
+    "!src/backends/webview/poseRuntimeSource.js",
+    "ios",
+    "PoseTrackerVision.podspec",
+    "react-native.config.js",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "build": "node scripts/sync-sdk-version.mjs && node scripts/embed-pose-runtime.mjs && tsc -p tsconfig.json && node scripts/copy-pose-runtime-source.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "embed:runtime": "node scripts/embed-pose-runtime.mjs",
+    "prepack": "npm run build",
+    "pack:dry": "npm pack --dry-run"
+  },
+  "keywords": [
+    "human-pose-estimation",
+    "pose-estimation",
+    "react-native",
+    "react-native-pose-estimation",
+    "ios",
+    "android",
+    "expo",
+    "expo-go",
+    "movenet",
+    "computer-vision",
+    "fitness",
+    "exercise-tracking",
+    "keypoints",
+    "posetracker",
+    "online-ai",
+    "light-sdk",
+    "webview",
+    "sdk"
+  ],
+  "author": {
+    "name": "Movelytics SAS",
+    "email": "hello@posetracker.com",
+    "url": "https://www.posetracker.com"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "homepage": "https://github.com/Movelytics/react-native-pose-estimation-light#readme",
+  "bugs": {
+    "url": "https://github.com/Movelytics/react-native-pose-estimation-light/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Movelytics/react-native-pose-estimation-light.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "js-sha256": "^0.11.0"
+  },
+  "peerDependencies": {
+    "expo-file-system": ">=15.0.0",
+    "react": ">=18.0.0",
+    "react-native": ">=0.72.0",
+    "react-native-blob-util": ">=0.19.0",
+    "react-native-fs": ">=2.20.0",
+    "react-native-webview": ">=13.0.0"
+  },
+  "peerDependenciesMeta": {
+    "expo-file-system": {
+      "optional": true
+    },
+    "react-native-fs": {
+      "optional": true
+    },
+    "react-native-blob-util": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "react": "^18.2.0",
+    "react-native": "^0.74.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,23 @@
+# Keep publish tarball lean — `files` in package.json is the allow-list.
+
+# Generated source lives in lib/ only (react-native entry → lib/index.js)
+src/backends/webview/poseRuntimeSource.js
+
+node_modules/
+**/node_modules/
+dist-runtime/
+assets/
+runtime/
+scripts/
+*.tsbuildinfo
+.tsbuildinfo
+.DS_Store
+.env
+.env.*
+*.log
+coverage/
+__tests__/
+**/*.test.ts
+**/*.spec.ts
+.vscode/
+.idea/
