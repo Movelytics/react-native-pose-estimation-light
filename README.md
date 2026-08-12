@@ -29,6 +29,9 @@ download at session start.
 
 Full comparison: [LIGHT_SDK.md](docs/LIGHT_SDK.md).
 
+**Agents:** shared UX/API/bugfixes → mirror to offline (or ask first). See
+[`DUAL_SDK_CHANGES.md`](docs/DUAL_SDK_CHANGES.md).
+
 ## Install
 
 ```bash
@@ -79,6 +82,9 @@ function CameraScreen() {
       drawSkeleton
       loadingText="AI Loading"
       coldStart="full"
+      // Default source="camera". Host-picked file:
+      // source="image" sourceUri={fileUri}
+      // source="video" sourceUri={fileUri}
     />
   );
 }
@@ -140,8 +146,10 @@ Yes for keypoints — but a network is still required to load TF.js + MoveNet.
 Yes (`react-native-webview` peer).
 
 **BlazePose?**  
-`model: 'blazepose'` is accepted for API parity but **not wired** yet. Pass a
-TF.js `modelUrl` for custom graph models.
+Pass `model: 'blazepose'` on `PoseTrackerProvider` options. Loads
+`@tensorflow-models/pose-detection` from jsDelivr in the WebView (lite /
+TF.js). Keypoints stay COCO-17. Heavier than MoveNet — expect lower FPS on
+mid-range Android. Offline SDK does **not** ship BlazePose.
 
 **Who sees the watermark?**  
 Keyless and free plans. Hidden for paid plans.

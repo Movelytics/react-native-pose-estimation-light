@@ -35,7 +35,9 @@ export {
   getOnlineRuntimeParts,
   getOnlineRuntimeVersion,
   defaultOnlineRuntimeUrls,
+  defaultPoseDetectionCdnUrl,
   ONLINE_TFJS_VERSION,
+  ONLINE_POSE_DETECTION_VERSION,
 } from './backends/webview/onlineRuntime';
 export type {
   GetOnlineRuntimeOptions,
@@ -49,6 +51,7 @@ export {
 } from './models/poseModels';
 export type {
   PoseModelAlias,
+  PoseModelKind,
   ResolvePoseModelOptions,
   ResolvedPoseModel,
 } from './models/poseModels';

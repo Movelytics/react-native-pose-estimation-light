@@ -1,6 +1,6 @@
 {
   "name": "@pose-tracker/react-native-pose-estimation-light",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Human pose estimation SDK for React Native (light / online) — MoveNet Lightning via CDN + model URL each session, no bundled weights. iOS & Android (Expo Go). Optional API-key exercise engine.",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

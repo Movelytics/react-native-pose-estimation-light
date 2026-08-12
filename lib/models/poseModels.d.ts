@@ -5,9 +5,9 @@
  * MoveNet SinglePose Lightning hosted at app.posetracker.com (same URL as
  * `usePoseDetection` / tracking WebView `modelUrl`).
  *
- * BlazePose is accepted as a `model` alias for API parity but is not wired
- * in the RN WebView yet (needs MediaPipe). Pass a TF.js `modelUrl` for any
- * custom graph model.
+ * BlazePose loads via CDN `@tensorflow-models/pose-detection` inside the
+ * WebView (no graph `modelUrl`). Pass a TF.js `modelUrl` for any custom
+ * graph model.
  */
 /** Production MoveNet SinglePose Lightning topology (Front default). */
 export declare const DEFAULT_MOVENET_LIGHTNING_URL = "https://app.posetracker.com/scripts/tmp_model_to_remove.json";
@@ -22,16 +22,18 @@ export interface ResolvePoseModelOptions {
     /** Explicit TF.js graph-model topology URL (weights resolve as siblings). */
     modelUrl?: string;
 }
+export type PoseModelKind = 'movenet-graph' | 'blazepose' | 'custom-graph' | 'unsupported';
 export interface ResolvedPoseModel {
     /** Stable id reported in diagnostics / track params. */
     modelId: string;
-    /** TF.js `loadGraphModel` URL, or null when unsupported without override. */
+    kind: PoseModelKind;
+    /** TF.js `loadGraphModel` URL when kind is movenet-graph or custom-graph. */
     modelUrl: string | null;
-    /** Human-readable reason when {@link modelUrl} is null. */
+    /** Human-readable reason when kind is unsupported. */
     unsupportedReason?: string;
 }
 /**
- * Resolve which TF.js graph model the light WebView should fetch.
+ * Resolve which online pose model the light WebView should run.
  * Default: MoveNet SinglePose Lightning (product URL).
  */
 export declare function resolvePoseModel(options?: ResolvePoseModelOptions): ResolvedPoseModel;

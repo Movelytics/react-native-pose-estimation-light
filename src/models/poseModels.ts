@@ -5,9 +5,9 @@
  * MoveNet SinglePose Lightning hosted at app.posetracker.com (same URL as
  * `usePoseDetection` / tracking WebView `modelUrl`).
  *
- * BlazePose is accepted as a `model` alias for API parity but is not wired
- * in the RN WebView yet (needs MediaPipe). Pass a TF.js `modelUrl` for any
- * custom graph model.
+ * BlazePose loads via CDN `@tensorflow-models/pose-detection` inside the
+ * WebView (no graph `modelUrl`). Pass a TF.js `modelUrl` for any custom
+ * graph model.
  */
 
 /** Production MoveNet SinglePose Lightning topology (Front default). */
@@ -32,17 +32,20 @@ export interface ResolvePoseModelOptions {
   modelUrl?: string;
 }
 
+export type PoseModelKind = 'movenet-graph' | 'blazepose' | 'custom-graph' | 'unsupported';
+
 export interface ResolvedPoseModel {
   /** Stable id reported in diagnostics / track params. */
   modelId: string;
-  /** TF.js `loadGraphModel` URL, or null when unsupported without override. */
+  kind: PoseModelKind;
+  /** TF.js `loadGraphModel` URL when kind is movenet-graph or custom-graph. */
   modelUrl: string | null;
-  /** Human-readable reason when {@link modelUrl} is null. */
+  /** Human-readable reason when kind is unsupported. */
   unsupportedReason?: string;
 }
 
 /**
- * Resolve which TF.js graph model the light WebView should fetch.
+ * Resolve which online pose model the light WebView should run.
  * Default: MoveNet SinglePose Lightning (product URL).
  */
 export function resolvePoseModel(options: ResolvePoseModelOptions = {}): ResolvedPoseModel {
@@ -55,30 +58,30 @@ export function resolvePoseModel(options: ResolvePoseModelOptions = {}): Resolve
       typeof options.model === 'string' && options.model.trim().length > 0
         ? options.model.trim()
         : 'custom';
-    return { modelId: alias, modelUrl: explicit };
+    return { modelId: alias, kind: 'custom-graph', modelUrl: explicit };
   }
 
   const key = (options.model ?? 'movenet').trim().toLowerCase();
   if (key === 'movenet' || key === 'movenet-singlepose-lightning' || key === 'lightning') {
     return {
       modelId: 'movenet-singlepose-lightning',
+      kind: 'movenet-graph',
       modelUrl: DEFAULT_MOVENET_LIGHTNING_URL,
     };
   }
   if (key === 'blazepose') {
     return {
       modelId: 'blazepose',
+      kind: 'blazepose',
       modelUrl: null,
-      unsupportedReason:
-        'BlazePose is not wired in the light RN WebView yet (needs MediaPipe). ' +
-        'Use model="movenet" or pass a TF.js graph modelUrl.',
     };
   }
   return {
     modelId: key,
+    kind: 'unsupported',
     modelUrl: null,
     unsupportedReason:
-      `Unknown model "${options.model}". Use "movenet" (default) or pass modelUrl.`,
+      `Unknown model "${options.model}". Use "movenet" (default), "blazepose", or pass modelUrl.`,
   };
 }
 

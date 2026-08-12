@@ -2,9 +2,10 @@
  * WebView HTML assembler (light / online).
  *
  * Loads TF.js from CDN script tags and MoveNet (or a custom graph model)
- * from {@link OnlineRuntimeParts.modelUrl}. The thin page runtime is still
- * inlined from the package. Same camera / adaptive quality / postMessage
- * events as the offline SDK.
+ * from {@link OnlineRuntimeParts.modelUrl}. For BlazePose, also loads
+ * `@tensorflow-models/pose-detection` (no graph URL). The thin page runtime
+ * is still inlined from the package. Same camera / adaptive quality /
+ * postMessage events as the offline SDK.
  */
 
 import { Platform } from 'react-native';
@@ -21,7 +22,7 @@ import { POSETRACKER_LOGO_DATA_URL } from './brandAssets';
 import type { OnlineRuntimeParts } from './onlineRuntime';
 
 /** Bumped on every assembler-path change — appears in WebView diag logs. */
-export const POSE_HTML_BUILD = '20260811-onlineLight-localhostBase';
+export const POSE_HTML_BUILD = '20260812-onlineLight-mediaSources';
 
 /** Default boot overlay copy (WebView `loading_message` parity). */
 export const DEFAULT_LOADING_TEXT = 'AI Loading';
@@ -76,16 +77,23 @@ export interface PoseHtmlOptions {
   showWatermark?: boolean;
   /** Show the technical `#hud` overlay (FPS / backend). Default false. */
   debugHud?: boolean;
+  /**
+   * Input source mode. Default `camera`.
+   * For `video` / `image`, pass a URI the WebView can load (`sourceUrl`).
+   */
+  sourceType?: 'camera' | 'video' | 'image';
+  /** file://, content://, https://, or data: URL for video/image modes. */
+  sourceUrl?: string;
 }
 
 const PAGE_CSS = `
     html, body { margin:0; padding:0; width:100%; height:100%; background:#000; overflow:hidden; }
     #wrap { position:relative; width:100%; height:100%; background:#000; }
-    video, canvas {
+    video, img#still, canvas {
       position:absolute; inset:0; width:100%; height:100%;
       object-fit:cover; opacity:0; transition:opacity 180ms ease-out;
     }
-    video { z-index:1; background:#000; }
+    video, img#still { z-index:1; background:#000; }
     canvas { z-index:2; pointer-events:none; }
     #boot {
       position:absolute; inset:0; z-index:4;
@@ -204,11 +212,17 @@ export function buildPoseHtml(parts: OnlineRuntimeParts, options?: PoseHtmlOptio
     loadingText,
     showWatermark: watermarkOn,
     debugHud,
+    sourceType:
+      options?.sourceType === 'video' || options?.sourceType === 'image'
+        ? options.sourceType
+        : 'camera',
+    sourceUrl: typeof options?.sourceUrl === 'string' ? options.sourceUrl : null,
     captureConstraintMode: CAPTURE_CONSTRAINT_MODE,
     capturePriority,
     platform: Platform.OS,
     modelUrl: parts.modelUrl,
     modelId: parts.modelId,
+    modelKind: parts.modelKind,
     tfjsWasmPath: parts.tfjsWasmPath,
     inferFrameSkip:
       isAndroid && ANDROID_INFER_FRAME_SKIP > 0 ? ANDROID_INFER_FRAME_SKIP : 0,
@@ -228,6 +242,7 @@ export function buildPoseHtml(parts: OnlineRuntimeParts, options?: PoseHtmlOptio
     '<style>', PAGE_CSS, '</style></head><body>',
     '<div id="wrap">',
     '<video id="video" playsinline muted autoplay></video>',
+    '<img id="still" alt="" draggable="false" />',
     '<canvas id="overlay"></canvas>',
     '<div id="wm">',
     '<div class="wm-powered">powered by</div>',
@@ -247,6 +262,8 @@ export function buildPoseHtml(parts: OnlineRuntimeParts, options?: PoseHtmlOptio
     '<script>window.__PT_BUILD=', JSON.stringify(`${POSE_HTML_BUILD}/${parts.version}`),
     ';window.__PT_CONFIG=', config,
     ';window.__PT_MODEL_URL=', JSON.stringify(parts.modelUrl),
+    ';window.__PT_MODEL_ID=', JSON.stringify(parts.modelId),
+    ';window.__PT_MODEL_KIND=', JSON.stringify(parts.modelKind),
     ';window.__PT_WASM_PATH=', JSON.stringify(parts.tfjsWasmPath),
     ';window.__PT_MODEL_JSON=null',
     ';window.__PT_WEIGHTS_B64=null',

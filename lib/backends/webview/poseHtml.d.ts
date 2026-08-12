@@ -2,15 +2,16 @@
  * WebView HTML assembler (light / online).
  *
  * Loads TF.js from CDN script tags and MoveNet (or a custom graph model)
- * from {@link OnlineRuntimeParts.modelUrl}. The thin page runtime is still
- * inlined from the package. Same camera / adaptive quality / postMessage
- * events as the offline SDK.
+ * from {@link OnlineRuntimeParts.modelUrl}. For BlazePose, also loads
+ * `@tensorflow-models/pose-detection` (no graph URL). The thin page runtime
+ * is still inlined from the package. Same camera / adaptive quality /
+ * postMessage events as the offline SDK.
  */
 import type { CapturePriority } from '../../quality/profiles';
 import type { SkeletonDefinition } from '../../types/skeleton';
 import type { OnlineRuntimeParts } from './onlineRuntime';
 /** Bumped on every assembler-path change — appears in WebView diag logs. */
-export declare const POSE_HTML_BUILD = "20260811-onlineLight-localhostBase";
+export declare const POSE_HTML_BUILD = "20260812-onlineLight-mediaSources";
 /** Default boot overlay copy (WebView `loading_message` parity). */
 export declare const DEFAULT_LOADING_TEXT = "AI Loading";
 export interface PoseHtmlOptions {
@@ -63,6 +64,13 @@ export interface PoseHtmlOptions {
     showWatermark?: boolean;
     /** Show the technical `#hud` overlay (FPS / backend). Default false. */
     debugHud?: boolean;
+    /**
+     * Input source mode. Default `camera`.
+     * For `video` / `image`, pass a URI the WebView can load (`sourceUrl`).
+     */
+    sourceType?: 'camera' | 'video' | 'image';
+    /** file://, content://, https://, or data: URL for video/image modes. */
+    sourceUrl?: string;
 }
 /**
  * Assemble the pose page for online delivery: CDN TF.js + remote model URL

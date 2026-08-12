@@ -1,28 +1,61 @@
 /**
  * PoseTracker pose-runtime (light / online) — WebView page runtime (camera,
- * capture presets, MoveNet inference loop, skeleton, events).
+ * capture presets, MoveNet / BlazePose inference loop, skeleton, events).
  *
  * Shipped thin inside the light npm package; TF.js + model stay remote.
  *
  * Expects globals injected by the SDK HTML assembler:
  *   __PT_BUILD, __PT_CONFIG
  *   __PT_MODEL_URL (preferred) — TF.js graph model URL (Front product path)
+ *   __PT_MODEL_ID / __PT_MODEL_KIND — e.g. blazepose (no graph URL)
  *   OR __PT_MODEL_JSON + __PT_WEIGHTS_B64 — legacy in-memory artifacts
  *   __PT_WASM_PATH — CDN directory for tfjs-backend-wasm (online)
  *   OR __PT_WASM_B64 — embedded XNNPACK binaries (legacy)
  *   __PT_PIPELINE_WASM_B64 — optional proprietary pipeline (may be null)
+ *
+ * BlazePose: requires CDN `window.poseDetection` (injected when model=blazepose).
+ * Keypoints are mapped to COCO-17 (extra BlazePose joints dropped).
  */
 (function () {
   var CFG = window.__PT_CONFIG;
   var FACING = CFG.facingMode;
   var MIN_SCORE = CFG.minScore;
   var INPUT_SIZE = 192;
+  var MODEL_ID =
+    (CFG.modelId && String(CFG.modelId)) ||
+    (typeof window.__PT_MODEL_ID === 'string' && window.__PT_MODEL_ID) ||
+    'movenet-singlepose-lightning';
+  var MODEL_KIND =
+    (CFG.modelKind && String(CFG.modelKind)) ||
+    (typeof window.__PT_MODEL_KIND === 'string' && window.__PT_MODEL_KIND) ||
+    (MODEL_ID === 'blazepose' ? 'blazepose' : 'movenet-graph');
+  var IS_BLAZEPOSE = MODEL_KIND === 'blazepose' || MODEL_ID === 'blazepose';
   var KEYPOINT_NAMES = [
     'nose', 'left_eye', 'right_eye', 'left_ear', 'right_ear',
     'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow',
     'left_wrist', 'right_wrist', 'left_hip', 'right_hip',
     'left_knee', 'right_knee', 'left_ankle', 'right_ankle'
   ];
+  /** MediaPipe BlazePose landmark names → COCO-17 (extras dropped). */
+  var BLAZE_TO_COCO = {
+    nose: 'nose',
+    left_eye: 'left_eye',
+    right_eye: 'right_eye',
+    left_ear: 'left_ear',
+    right_ear: 'right_ear',
+    left_shoulder: 'left_shoulder',
+    right_shoulder: 'right_shoulder',
+    left_elbow: 'left_elbow',
+    right_elbow: 'right_elbow',
+    left_wrist: 'left_wrist',
+    right_wrist: 'right_wrist',
+    left_hip: 'left_hip',
+    right_hip: 'right_hip',
+    left_knee: 'left_knee',
+    right_knee: 'right_knee',
+    left_ankle: 'left_ankle',
+    right_ankle: 'right_ankle'
+  };
 
   /**
    * Default skeleton — same document as PoseTrackerFront
@@ -65,6 +98,45 @@
 
   var video = document.getElementById('video');
   var canvas = document.getElementById('overlay');
+
+  var still = document.getElementById('still');
+  var sourceMode = (CFG.sourceType === 'video' || CFG.sourceType === 'image')
+    ? CFG.sourceType
+    : 'camera';
+  var sourceUrl = (typeof CFG.sourceUrl === 'string' && CFG.sourceUrl) ? CFG.sourceUrl : null;
+  var imageShotPending = false;
+
+  function activeFrame() {
+    if (sourceMode === 'image' && still) return still;
+    return video;
+  }
+
+  function frameSize() {
+    var el = activeFrame();
+    if (el && el !== video) {
+      return { vw: el.naturalWidth || el.width || 0, vh: el.naturalHeight || el.height || 0 };
+    }
+    return { vw: video.videoWidth || 0, vh: video.videoHeight || 0 };
+  }
+
+  function setMediaVisible(mode) {
+    // mode: 'video' | 'image' | 'none'
+    var showVideo = mode === 'video';
+    var showImage = mode === 'image';
+    var show = showVideo || showImage;
+    video.style.opacity = showVideo ? '1' : '0';
+    if (still) still.style.opacity = showImage ? '1' : '0';
+    canvas.style.opacity = show ? '1' : '0';
+    if (bootCover) {
+      if (show) bootCover.classList.add('hide');
+      else {
+        bootCover.classList.remove('hide');
+        resetBootLoadingText();
+      }
+    }
+    applyWatermarkVisibility();
+  }
+
   var hud = document.getElementById('hud');
   var bootCover = document.getElementById('boot');
   var watermarkEl = document.getElementById('wm');
@@ -102,27 +174,23 @@
    * a tiny or over-zoomed frame for a few frames.
    */
   function setCameraVisible(visible) {
-    video.style.opacity = visible ? '1' : '0';
-    canvas.style.opacity = visible ? '1' : '0';
-    if (bootCover) {
-      if (visible) {
-        bootCover.classList.add('hide');
-      } else {
-        bootCover.classList.remove('hide');
-        resetBootLoadingText();
-      }
+    if (visible) {
+      setMediaVisible(sourceMode === 'image' ? 'image' : 'video');
+    } else {
+      setMediaVisible('none');
     }
-    applyWatermarkVisibility();
   }
 
   function revealCameraWhenReady() {
     if (cameraRevealed) return;
-    if (!(video.videoWidth > 0 && video.videoHeight > 0)) return;
+    var sz = frameSize();
+    if (!(sz.vw > 0 && sz.vh > 0)) return;
     // Two rAFs: let the browser apply object-fit:cover with real intrinsic size.
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
         if (cameraRevealed) return;
-        if (!(video.videoWidth > 0 && video.videoHeight > 0)) return;
+        var sz2 = frameSize();
+        if (!(sz2.vw > 0 && sz2.vh > 0)) return;
         cameraRevealed = true;
         setCameraVisible(true);
         applyWatermarkVisibility();
@@ -156,6 +224,7 @@
     setTimeout(tick, 60);
   }
   var model = null;
+  var blazeDetector = null;
   var running = false;
   var busy = false;
   // Android experiment: skip N ready rAF ticks between inferences (iOS = 0).
@@ -340,6 +409,13 @@
   }
 
   async function benchZeros(n) {
+    if (IS_BLAZEPOSE) {
+      // No graph execute — seed a conservative median so AdaptiveChoice
+      // prefers a lower capture tier (BlazePose is heavier than MoveNet).
+      var seeded = [];
+      for (var i = 0; i < Math.max(1, n - 1); i++) seeded.push(55);
+      return seeded;
+    }
     var times = [];
     for (var i = 0; i < n; i++) {
       var z = tf.zeros([1, INPUT_SIZE, INPUT_SIZE, 3], 'int32');
@@ -354,6 +430,31 @@
   }
 
   async function loadModel() {
+    if (IS_BLAZEPOSE) {
+      if (blazeDetector && blazeDetector.dispose) {
+        try { blazeDetector.dispose(); } catch (e) {}
+      }
+      blazeDetector = null;
+      var poseDetection = window.poseDetection;
+      if (!poseDetection || typeof poseDetection.createDetector !== 'function') {
+        throw new Error(
+          'BlazePose requires CDN `@tensorflow-models/pose-detection` ' +
+            '(window.poseDetection missing)'
+        );
+      }
+      post({
+        type: 'diag',
+        message: 'createDetector BlazePose lite (tfjs)'
+      });
+      blazeDetector = await poseDetection.createDetector(
+        poseDetection.SupportedModels.BlazePose,
+        { runtime: 'tfjs', modelType: 'lite', enableSmoothing: true }
+      );
+      // Sentinel so loop / resume checks treat the detector as loaded.
+      model = { kind: 'blazepose' };
+      return;
+    }
+
     if (model && model.dispose) try { model.dispose(); } catch (e) {}
     var modelUrl =
       (typeof window.__PT_MODEL_URL === 'string' && window.__PT_MODEL_URL) ||
@@ -487,8 +588,10 @@
    */
   async function preparePoseInput() {
     var t0 = performance.now();
-    var vw = video.videoWidth || 1;
-    var vh = video.videoHeight || 1;
+    var frame = activeFrame();
+    var sz = frameSize();
+    var vw = sz.vw || 1;
+    var vh = sz.vh || 1;
     var scale = Math.min(INPUT_SIZE / vw, INPUT_SIZE / vh);
     var drawW = vw * scale;
     var drawH = vh * scale;
@@ -499,7 +602,7 @@
     var c2d = poseCanvasCtx();
     c2d.fillStyle = '#000';
     c2d.fillRect(0, 0, INPUT_SIZE, INPUT_SIZE);
-    c2d.drawImage(video, 0, 0, vw, vh, offsetX, offsetY, drawW, drawH);
+    c2d.drawImage(frame, 0, 0, vw, vh, offsetX, offsetY, drawW, drawH);
 
     if (PREPROCESS_PATH === 'canvas-direct') {
       pushStage('bitmap', performance.now() - t0);
@@ -530,6 +633,19 @@
   }
 
   async function infer() {
+    if (IS_BLAZEPOSE) {
+      if (!blazeDetector) throw new Error('BlazePose detector not loaded');
+      var t0b = performance.now();
+      var poses = await blazeDetector.estimatePoses(activeFrame(), {
+        flipHorizontal: false,
+        maxPoses: 1
+      });
+      var totalMsB = performance.now() - t0b;
+      pushStage('exec', totalMsB);
+      pushStage('total', totalMsB);
+      return { kind: 'blazepose', poses: poses, totalMs: totalMsB };
+    }
+
     var t0 = performance.now();
     var prepared = await preparePoseInput();
     var t1 = performance.now();
@@ -551,7 +667,7 @@
     // must see preprocess cost, especially on Android HD capture.
     var totalMs = t3 - t0;
     pushStage('total', totalMs);
-    return { data: data, totalMs: totalMs };
+    return { kind: 'movenet', data: data, totalMs: totalMs };
   }
 
   /** Rank which stage dominates the frame (for leverHints). */
@@ -774,16 +890,68 @@
     return { drawKps: drawKps, rnKps: rnKps, meanScore: scoreSum / 17, above: above };
   }
 
-  function decodeAndPublish(data, inferenceTimeMs) {
-    // Pipeline (matches PoseTrackerFront):
-    //   MoveNet [0,1] on letterboxed 192² → video pixels → object-fit:cover display
-    // Front camera: video+canvas CSS scaleX(-1). Draw in SENSOR display space;
-    // flip only the RN payload so host overlays match the mirrored preview.
+  function decodeBlazePoses(poses, dispW, dispH) {
+    var pose = poses && poses[0];
+    var vw = video.videoWidth || 1;
+    var vh = video.videoHeight || 1;
+    letterbox = { offsetX: 0, offsetY: 0, drawW: vw, drawH: vh, vw: vw, vh: vh };
+    var byName = {};
+    if (pose && pose.keypoints) {
+      for (var i = 0; i < pose.keypoints.length; i++) {
+        var kp = pose.keypoints[i];
+        var name = String(kp.name || '').toLowerCase();
+        var coco = BLAZE_TO_COCO[name];
+        if (!coco) continue;
+        byName[coco] = {
+          x: kp.x,
+          y: kp.y,
+          score: typeof kp.score === 'number' ? kp.score : 0
+        };
+      }
+    }
+    var scale = Math.max(dispW / vw, dispH / vh);
+    var ox = (dispW - vw * scale) / 2;
+    var oy = (dispH - vh * scale) / 2;
+    var drawKps = [];
+    var rnKps = [];
+    var scoreSum = 0;
+    var above = 0;
+    for (var j = 0; j < KEYPOINT_NAMES.length; j++) {
+      var kn = KEYPOINT_NAMES[j];
+      var k = byName[kn] || { x: 0, y: 0, score: 0 };
+      var dx = k.x * scale + ox;
+      var dy = k.y * scale + oy;
+      var nx = dispW > 0 ? dx / dispW : 0;
+      var ny = dispH > 0 ? dy / dispH : 0;
+      if (FACING === 'user') nx = 1 - nx;
+      scoreSum += k.score;
+      if (k.score >= 0.3) above += 1;
+      drawKps.push({
+        name: kn,
+        xPx: k.x,
+        yPx: k.y,
+        dx: dx,
+        dy: dy,
+        score: k.score
+      });
+      rnKps.push({
+        name: kn,
+        x: Math.min(1, Math.max(0, nx)),
+        y: Math.min(1, Math.max(0, ny)),
+        score: k.score
+      });
+    }
+    return {
+      drawKps: drawKps,
+      rnKps: rnKps,
+      meanScore: scoreSum / 17,
+      above: above
+    };
+  }
+
+  function publishDecoded(decoded, inferenceTimeMs) {
     var dispW = canvas.clientWidth || 1;
     var dispH = canvas.clientHeight || 1;
-    var decoded = pipeline
-      ? decodeWithPipeline(data, dispW, dispH)
-      : decodeWithJs(data, dispW, dispH);
     var drawKps = decoded.drawKps;
     var meanScore = decoded.meanScore;
     var above = decoded.above;
@@ -809,14 +977,15 @@
       var execMs = median(stageMs.exec);
       var totalMed = median(stageMs.total);
       var estFromMed = med != null && med > 0 ? 1000 / med : null;
+      var modelTag = IS_BLAZEPOSE ? 'blazepose' : 'movenet';
       var modeTag = 'main/' + activeFlags +
-        (pipeline ? '/wasm-pipeline' : '') +
+        (pipeline && !IS_BLAZEPOSE ? '/wasm-pipeline' : '') +
         '/' + PREPROCESS_PATH +
         (INFER_FRAME_SKIP > 0 ? '/skip' + INFER_FRAME_SKIP : '') +
         (SOFT_CAP_PROFILE ? '/soft:' + SOFT_CAP_PROFILE : '');
 
       var hudLine =
-        'movenet · ' + activeBackend + '/' + activeFlags + ' · ' +
+        modelTag + ' · ' + activeBackend + '/' + activeFlags + ' · ' +
         fps + ' fps · ' + (med != null ? Math.round(med) + ' ms' : '?') +
         ' · kp≥0.3=' + above + '/17';
       if (PERF_DEBUG) {
@@ -842,7 +1011,8 @@
         inferFrameSkip: INFER_FRAME_SKIP,
         softCapProfile: SOFT_CAP_PROFILE,
         minTargetFps: MIN_TARGET_FPS,
-        perfDebug: PERF_DEBUG
+        perfDebug: PERF_DEBUG,
+        modelId: MODEL_ID
       };
       var leverHints = PERF_DEBUG
         ? buildLeverHints(totalMed != null ? totalMed : med, drawMs, pixelsMs, execMs, fps)
@@ -880,6 +1050,25 @@
     });
   }
 
+  function decodeAndPublish(data, inferenceTimeMs) {
+    // Pipeline (matches PoseTrackerFront):
+    //   MoveNet [0,1] on letterboxed 192² → video pixels → object-fit:cover display
+    // Front camera: video+canvas CSS scaleX(-1). Draw in SENSOR display space;
+    // flip only the RN payload so host overlays match the mirrored preview.
+    var dispW = canvas.clientWidth || 1;
+    var dispH = canvas.clientHeight || 1;
+    var decoded = pipeline
+      ? decodeWithPipeline(data, dispW, dispH)
+      : decodeWithJs(data, dispW, dispH);
+    publishDecoded(decoded, inferenceTimeMs);
+  }
+
+  function decodeAndPublishBlaze(poses, inferenceTimeMs) {
+    var dispW = canvas.clientWidth || 1;
+    var dispH = canvas.clientHeight || 1;
+    publishDecoded(decodeBlazePoses(poses, dispW, dispH), inferenceTimeMs);
+  }
+
   // Loop token: a stale rAF chain (pre-suspend) must never survive next to a
   // resumed one — two chains would double the inference attempt rate.
   var loopToken = 0;
@@ -890,7 +1079,12 @@
 
   async function loop(token) {
     if (token !== loopToken || !running || !model) return;
-    if (!busy && video.readyState >= 2 && video.videoWidth > 0) {
+    var szLoop = frameSize();
+    var mediaReady = sourceMode === 'image'
+      ? (szLoop.vw > 0 && imageShotPending)
+      : (video.readyState >= 2 && video.videoWidth > 0 &&
+         !(sourceMode === 'video' && (video.paused || video.ended)));
+    if (!busy && mediaReady) {
       // Android frame-skip: after each inference, burn N free rAF ticks before
       // the next one. Preview keeps streaming; last skeleton stays on canvas.
       if (skipCountdown > 0) {
@@ -902,8 +1096,18 @@
           var result = await infer();
           inferErrorStreak = 0;
           inferTicksWindow += 1;
-          decodeAndPublish(result.data, result.totalMs);
+          if (result.kind === 'blazepose') {
+            decodeAndPublishBlaze(result.poses, result.totalMs);
+          } else {
+            decodeAndPublish(result.data, result.totalMs);
+          }
           skipCountdown = INFER_FRAME_SKIP;
+          if (sourceMode === 'image') {
+            imageShotPending = false;
+            running = false;
+            busy = false;
+            return;
+          }
         } catch (err) {
           var message = err && err.message ? err.message : String(err);
           setHud('infer error: ' + message);
@@ -1013,17 +1217,24 @@
       if (CFG.idealFrameRate == null) CFG.idealFrameRate = 30;
       if (!CFG.profileId) CFG.profileId = 'ultralite';
 
-      // 0) Proprietary pipeline module (non-fatal when unavailable).
-      await initPipeline();
+      // 0) Proprietary pipeline module (MoveNet-only; skip for BlazePose).
+      if (!IS_BLAZEPOSE) {
+        await initPipeline();
+      } else {
+        post({
+          type: 'diag',
+          message: 'pose-pipeline: skipped (blazepose uses pose-detection)'
+        });
+      }
 
-      // 1) Bench MoveNet WITHOUT the camera — estimate FPS, pick capture tier.
+      // 1) Bench model WITHOUT the camera — estimate FPS, pick capture tier.
       post({
         type: 'initialization',
         step: 'loading_pose_model',
-        message: 'loading pose model',
+        message: IS_BLAZEPOSE ? 'loading BlazePose' : 'loading pose model',
         ready: false
       });
-      setHud('loading MoveNet (webgl)…');
+      setHud(IS_BLAZEPOSE ? 'loading BlazePose (webgl)…' : 'loading MoveNet (webgl)…');
       var best = await pickFastestBackend();
 
       var estFps = best.med != null && best.med > 0 ? 1000 / best.med : null;
@@ -1111,7 +1322,11 @@
       if (BOOT_CAMERA) {
         // Full cold-start (legacy): open camera before posting ready — same
         // as the historical warmer that called getUserMedia during preload.
-        await openCameraAndLoop('boot-full');
+        if ((sourceMode === 'video' || sourceMode === 'image') && sourceUrl) {
+          await window.__PT_SET_SOURCE({ type: sourceMode, url: sourceUrl });
+        } else {
+          await openCameraAndLoop('boot-full');
+        }
         if (suspended) {
           post({ type: 'diag', message: 'boot finished while hidden — staying suspended (camera released)' });
           stopCameraTracks();
@@ -1334,6 +1549,112 @@
         ' reason=' + reason
     });
   }
+
+
+  function stopNonCameraMedia() {
+    try { video.pause(); } catch (e) {}
+    try { video.removeAttribute('src'); video.srcObject = null; video.load(); } catch (e) {}
+    if (still) {
+      try { still.removeAttribute('src'); } catch (e) {}
+    }
+  }
+
+  function loadVideoUrl(url) {
+    return new Promise(function (resolve, reject) {
+      video.onloadeddata = function () { resolve(); };
+      video.onerror = function () { reject(new Error('Failed to load video URL')); };
+      video.loop = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.src = url;
+      video.load();
+      video.play().catch(function () {});
+      setTimeout(function () {
+        if (video.videoWidth > 0) resolve();
+      }, 50);
+    });
+  }
+
+  function loadImageUrl(url) {
+    return new Promise(function (resolve, reject) {
+      if (!still) { reject(new Error('still image element missing')); return; }
+      still.onload = function () { resolve(); };
+      still.onerror = function () { reject(new Error('Failed to load image URL')); };
+      still.src = url;
+      if (still.complete && still.naturalWidth > 0) resolve();
+    });
+  }
+
+  /**
+   * Switch pose input: { type: 'camera'|'video'|'image', url?: string, base64?: string, mime?: string }
+   * Host apps pick a file (document/image picker) and pass a URI or data URL.
+   */
+  window.__PT_SET_SOURCE = async function (opts) {
+    opts = opts || {};
+    var type = opts.type || 'camera';
+    var url = opts.url || opts.uri || null;
+    if (opts.base64) {
+      var mime = opts.mime || (type === 'video' ? 'video/mp4' : 'image/jpeg');
+      url = 'data:' + mime + ';base64,' + opts.base64;
+    }
+    running = false;
+    loopToken += 1;
+    busy = false;
+    imageShotPending = false;
+    stopCameraTracks();
+    stopNonCameraMedia();
+    cameraArmed = type === 'camera' ? cameraArmed : false;
+    cameraRevealed = false;
+    setCameraVisible(false);
+    sourceMode = (type === 'video' || type === 'image') ? type : 'camera';
+    sourceUrl = url;
+
+    if (sourceMode === 'camera') {
+      post({ type: 'initialization', step: 'accessing_webcam', message: 'accessing webcam (source=camera)', ready: false });
+      await openCameraAndLoop('set-source-camera');
+      if (!suspended) {
+        startLoop();
+        postReadySignal(true, 'full');
+      }
+      return;
+    }
+
+    if (!url) {
+      post({ type: 'error', message: 'source=' + sourceMode + ' requires url or base64' });
+      return;
+    }
+
+    post({
+      type: 'initialization',
+      step: 'loading_media',
+      message: 'loading ' + sourceMode + ' (source=' + sourceMode + ')',
+      ready: false
+    });
+    try {
+      if (sourceMode === 'video') {
+        cameraArmed = true; // allow resume semantics for file video? keep false for camera reopen
+        cameraArmed = false;
+        await loadVideoUrl(url);
+        revealCameraWhenReady();
+        startLoop();
+        post({ type: 'ready', backend: lastWarmBackend, medianInferenceMs: lastWarmMedMs, warmUpRunsMs: lastWarmTimes, estimatedFps: lastWarmEstFps, profileId: CFG.profileId, cameraOpened: false, coldStart: 'full', gl: glInfo(), note: 'source=video' });
+      } else {
+        await loadImageUrl(url);
+        imageShotPending = true;
+        revealCameraWhenReady();
+        startLoop();
+        post({ type: 'ready', backend: lastWarmBackend, medianInferenceMs: lastWarmMedMs, warmUpRunsMs: lastWarmTimes, estimatedFps: lastWarmEstFps, profileId: CFG.profileId, cameraOpened: false, coldStart: 'full', gl: glInfo(), note: 'source=image' });
+      }
+    } catch (err) {
+      post({ type: 'error', message: 'media load failed: ' + (err && err.message ? err.message : String(err)) });
+    }
+  };
+
+  window.__PT_ANALYZE = function () {
+    if (sourceMode !== 'image') return;
+    imageShotPending = true;
+    if (!running) startLoop();
+  };
 
   window.__PT_OPEN_CAMERA = function () {
     return openCameraAndLoop('host-openCamera').then(function () {

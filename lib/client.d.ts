@@ -60,8 +60,8 @@ export interface PoseTrackerClientOptions extends ConfigureOptions {
     usageTracker?: UsageTracker;
     /**
      * Docs API `model` query parity (`movenet` default, `blazepose`, …).
-     * BlazePose is not wired in the light WebView yet — use `modelUrl` for a
-     * custom TF.js graph model. Ignored when {@link modelUrl} is set.
+     * BlazePose loads via CDN pose-detection in the WebView (heavier than
+     * MoveNet). Ignored when {@link modelUrl} is set.
      */
     model?: PoseModelAlias;
     /**
