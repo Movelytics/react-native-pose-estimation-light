@@ -1,5 +1,7 @@
 # PoseTracker React Native — Light (online) Human Pose Estimation SDK
 
+**⭐ Star us on GitHub:** [Movelytics/react-native-pose-estimation-light](https://github.com/Movelytics/react-native-pose-estimation-light) — it helps other React Native and Expo developers find the SDK.
+
 <table>
   <tr>
     <td valign="top" width="300">
