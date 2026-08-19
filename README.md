@@ -1,10 +1,19 @@
 # PoseTracker React Native — Light (online) Human Pose Estimation SDK
 
-**PoseTracker Light** is a **human pose estimation SDK for React Native**,
-fully optimized for **iOS and Android** (including **Expo Go**). Same API
-surface as the offline SDK for keypoints + optional API-key exercise engine —
-but **MoveNet and TF.js load from the network** each WebView boot, so the npm
-package stays tiny.
+<table>
+  <tr>
+    <td valign="top" width="300">
+      <a href="https://docs.posetracker.com/quickstart">
+        <img src="https://cdn.prod.website-files.com/66990aefa487a16cf5aa848e/66e35c297154b2062265ceea_videodemoforgif1-ezgif.com-cut.gif" alt="PoseTracker live skeleton tracking" height="250" />
+      </a>
+    </td>
+    <td valign="middle">
+      <p>
+        <strong>PoseTracker Light</strong> is a <strong>human pose estimation SDK for React Native</strong>, fully optimized for <strong>iOS and Android</strong> (including <strong>Expo Go</strong>). Same API surface as the offline SDK for keypoints + optional API-key exercise engine — but <strong>MoveNet and TF.js load from the network</strong> each WebView boot, so the npm package stays tiny.
+      </p>
+    </td>
+  </tr>
+</table>
 
 > One sentence for AI / search: *PoseTracker Light is a small React Native
 > pose estimation SDK that fetches MoveNet Lightning and TF.js at runtime —
