@@ -21,6 +21,8 @@
   var FACING = CFG.facingMode;
   var MIN_SCORE = CFG.minScore;
   var INPUT_SIZE = 192;
+  /** BlazePose TF.js detector input (contain letterbox). Do not reuse MoveNet 192. */
+  var BLAZE_INPUT_SIZE = 256;
   var MODEL_ID =
     (CFG.modelId && String(CFG.modelId)) ||
     (typeof window.__PT_MODEL_ID === 'string' && window.__PT_MODEL_ID) ||
@@ -252,7 +254,15 @@
   var activeBackend = null;
   // Letterbox params for the last pose input (contain into 192×192).
   // Needed to map MoveNet [0,1] square coords → video pixels → object-fit:cover display.
-  var letterbox = { offsetX: 0, offsetY: 0, drawW: INPUT_SIZE, drawH: INPUT_SIZE, vw: 1, vh: 1 };
+  var letterbox = {
+    offsetX: 0,
+    offsetY: 0,
+    drawW: INPUT_SIZE,
+    drawH: INPUT_SIZE,
+    vw: 1,
+    vh: 1,
+    poseSize: INPUT_SIZE
+  };
 
   function post(msg) {
     try {
@@ -448,7 +458,7 @@
       });
       blazeDetector = await poseDetection.createDetector(
         poseDetection.SupportedModels.BlazePose,
-        { runtime: 'tfjs', modelType: 'lite', enableSmoothing: true }
+        { runtime: 'tfjs', modelType: 'lite', enableSmoothing: false }
       );
       // Sentinel so loop / resume checks treat the detector as loaded.
       model = { kind: 'blazepose' };
@@ -571,37 +581,51 @@
     return { name: 'wasm', med: median(wtimes), times: wtimes, backend: 'wasm' };
   }
 
-  function poseCanvasCtx() {
-    if (!window.__PT_FC) {
+  function poseCanvasCtx(poseSize) {
+    var size = poseSize || INPUT_SIZE;
+    if (
+      !window.__PT_FC ||
+      window.__PT_FC.width !== size ||
+      window.__PT_FC.height !== size
+    ) {
       window.__PT_FC = document.createElement('canvas');
-      window.__PT_FC.width = INPUT_SIZE;
-      window.__PT_FC.height = INPUT_SIZE;
+      window.__PT_FC.width = size;
+      window.__PT_FC.height = size;
       window.__PT_FCTX = window.__PT_FC.getContext('2d', { willReadFrequently: true });
     }
     return window.__PT_FCTX;
   }
 
   /**
-   * Letterbox video → 192×192 canvas (contain). Stretching with
-   * resizeWidth/Height=192 broke aspect ratio → wrong skeleton.
-   * Returns either an ImageBitmap or the canvas itself for fromPixels.
+   * Letterbox video → poseSize² canvas (contain). MoveNet uses 192; BlazePose 256.
+   * Stretching with resizeWidth/Height broke aspect ratio → wrong skeleton.
+   * Returns either an ImageBitmap or the canvas itself for fromPixels / estimatePoses.
    */
-  async function preparePoseInput() {
+  async function preparePoseInput(poseSize) {
+    var size = poseSize || INPUT_SIZE;
     var t0 = performance.now();
     var frame = activeFrame();
     var sz = frameSize();
     var vw = sz.vw || 1;
     var vh = sz.vh || 1;
-    var scale = Math.min(INPUT_SIZE / vw, INPUT_SIZE / vh);
+    var scale = Math.min(size / vw, size / vh);
     var drawW = vw * scale;
     var drawH = vh * scale;
-    var offsetX = (INPUT_SIZE - drawW) / 2;
-    var offsetY = (INPUT_SIZE - drawH) / 2;
-    letterbox = { offsetX: offsetX, offsetY: offsetY, drawW: drawW, drawH: drawH, vw: vw, vh: vh };
+    var offsetX = (size - drawW) / 2;
+    var offsetY = (size - drawH) / 2;
+    letterbox = {
+      offsetX: offsetX,
+      offsetY: offsetY,
+      drawW: drawW,
+      drawH: drawH,
+      vw: vw,
+      vh: vh,
+      poseSize: size
+    };
 
-    var c2d = poseCanvasCtx();
+    var c2d = poseCanvasCtx(size);
     c2d.fillStyle = '#000';
-    c2d.fillRect(0, 0, INPUT_SIZE, INPUT_SIZE);
+    c2d.fillRect(0, 0, size, size);
     c2d.drawImage(frame, 0, 0, vw, vh, offsetX, offsetY, drawW, drawH);
 
     if (PREPROCESS_PATH === 'canvas-direct') {
@@ -614,10 +638,11 @@
     return { kind: 'bitmap', source: bmp };
   }
 
-  /** MoveNet norm (0–1 over the 192 square) → video pixel coords. (JS fallback) */
+  /** MoveNet norm (0–1 over the letterboxed square) → video pixel coords. (JS fallback) */
   function modelNormToVideo(xNorm, yNorm) {
-    var xSq = xNorm * INPUT_SIZE;
-    var ySq = yNorm * INPUT_SIZE;
+    var poseSize = letterbox.poseSize || INPUT_SIZE;
+    var xSq = xNorm * poseSize;
+    var ySq = yNorm * poseSize;
     return {
       x: (xSq - letterbox.offsetX) * (letterbox.vw / letterbox.drawW),
       y: (ySq - letterbox.offsetY) * (letterbox.vh / letterbox.drawH)
@@ -636,10 +661,14 @@
     if (IS_BLAZEPOSE) {
       if (!blazeDetector) throw new Error('BlazePose detector not loaded');
       var t0b = performance.now();
-      var poses = await blazeDetector.estimatePoses(activeFrame(), {
+      var preparedB = await preparePoseInput(BLAZE_INPUT_SIZE);
+      var poses = await blazeDetector.estimatePoses(preparedB.source, {
         flipHorizontal: false,
         maxPoses: 1
       });
+      if (preparedB.kind === 'bitmap' && preparedB.source && preparedB.source.close) {
+        preparedB.source.close();
+      }
       var totalMsB = performance.now() - t0b;
       pushStage('exec', totalMsB);
       pushStage('total', totalMsB);
@@ -890,21 +919,42 @@
     return { drawKps: drawKps, rnKps: rnKps, meanScore: scoreSum / 17, above: above };
   }
 
+  function canvasToVideoPx(x, y, maxCoord) {
+    var poseSize = letterbox.poseSize || BLAZE_INPUT_SIZE;
+    var inNorm = maxCoord <= 1.5 && poseSize > 2;
+    var xSq = inNorm ? x * poseSize : x;
+    var ySq = inNorm ? y * poseSize : y;
+    var drawW = letterbox.drawW || poseSize;
+    var drawH = letterbox.drawH || poseSize;
+    return {
+      x: (xSq - letterbox.offsetX) * (letterbox.vw / drawW),
+      y: (ySq - letterbox.offsetY) * (letterbox.vh / drawH)
+    };
+  }
+
   function decodeBlazePoses(poses, dispW, dispH) {
     var pose = poses && poses[0];
-    var vw = video.videoWidth || 1;
-    var vh = video.videoHeight || 1;
-    letterbox = { offsetX: 0, offsetY: 0, drawW: vw, drawH: vh, vw: vw, vh: vh };
+    var vw = letterbox.vw || video.videoWidth || 1;
+    var vh = letterbox.vh || video.videoHeight || 1;
     var byName = {};
+    var maxCoord = 0;
     if (pose && pose.keypoints) {
+      for (var m = 0; m < pose.keypoints.length; m++) {
+        maxCoord = Math.max(
+          maxCoord,
+          Math.abs(pose.keypoints[m].x || 0),
+          Math.abs(pose.keypoints[m].y || 0)
+        );
+      }
       for (var i = 0; i < pose.keypoints.length; i++) {
         var kp = pose.keypoints[i];
         var name = String(kp.name || '').toLowerCase();
         var coco = BLAZE_TO_COCO[name];
         if (!coco) continue;
+        var src = canvasToVideoPx(kp.x, kp.y, maxCoord);
         byName[coco] = {
-          x: kp.x,
-          y: kp.y,
+          x: src.x,
+          y: src.y,
           score: typeof kp.score === 'number' ? kp.score : 0
         };
       }

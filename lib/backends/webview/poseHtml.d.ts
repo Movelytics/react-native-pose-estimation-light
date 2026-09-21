@@ -11,7 +11,7 @@ import type { CapturePriority } from '../../quality/profiles';
 import type { SkeletonDefinition } from '../../types/skeleton';
 import type { OnlineRuntimeParts } from './onlineRuntime';
 /** Bumped on every assembler-path change — appears in WebView diag logs. */
-export declare const POSE_HTML_BUILD = "20260812-onlineLight-mediaSources";
+export declare const POSE_HTML_BUILD = "20260921-blazeposeTfOpts";
 /** Default boot overlay copy (WebView `loading_message` parity). */
 export declare const DEFAULT_LOADING_TEXT = "AI Loading";
 export interface PoseHtmlOptions {

@@ -162,7 +162,9 @@ Yes (`react-native-webview` peer).
 Pass `model: 'blazepose'` on `PoseTrackerProvider` options. Loads
 `@tensorflow-models/pose-detection` from jsDelivr in the WebView (lite /
 TF.js). Keypoints stay COCO-17. Heavier than MoveNet — expect lower FPS on
-mid-range Android. Offline SDK does **not** ship BlazePose.
+mid-range Android. The **offline** package can run the same CDN BlazePose
+path but still ships unused bundled MoveNet; use light unless you need
+offline MoveNet.
 
 **Who sees the watermark?**  
 Keyless and free plans. Hidden for paid plans.

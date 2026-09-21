@@ -11,6 +11,7 @@
 import { Platform } from 'react-native';
 import {
   ANDROID_INFER_FRAME_SKIP,
+  ANDROID_INFER_FRAME_SKIP_BLAZEPOSE,
   ANDROID_PERF_DEBUG,
   ANDROID_PREPROCESS_PATH,
   ANDROID_SOFT_CAP_PROFILE,
@@ -22,7 +23,7 @@ import { POSETRACKER_LOGO_DATA_URL } from './brandAssets';
 import type { OnlineRuntimeParts } from './onlineRuntime';
 
 /** Bumped on every assembler-path change — appears in WebView diag logs. */
-export const POSE_HTML_BUILD = '20260812-onlineLight-mediaSources';
+export const POSE_HTML_BUILD = '20260921-blazeposeTfOpts';
 
 /** Default boot overlay copy (WebView `loading_message` parity). */
 export const DEFAULT_LOADING_TEXT = 'AI Loading';
@@ -224,8 +225,11 @@ export function buildPoseHtml(parts: OnlineRuntimeParts, options?: PoseHtmlOptio
     modelId: parts.modelId,
     modelKind: parts.modelKind,
     tfjsWasmPath: parts.tfjsWasmPath,
-    inferFrameSkip:
-      isAndroid && ANDROID_INFER_FRAME_SKIP > 0 ? ANDROID_INFER_FRAME_SKIP : 0,
+    inferFrameSkip: isAndroid
+      ? (parts.modelKind === 'blazepose' || parts.modelId === 'blazepose'
+          ? ANDROID_INFER_FRAME_SKIP_BLAZEPOSE
+          : ANDROID_INFER_FRAME_SKIP)
+      : 0,
     preprocessPath: isAndroid ? ANDROID_PREPROCESS_PATH : 'imagebitmap',
     softCapProfile:
       isAndroid && !preferQuality ? ANDROID_SOFT_CAP_PROFILE : null,

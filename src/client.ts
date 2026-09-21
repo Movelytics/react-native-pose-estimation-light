@@ -921,8 +921,9 @@ export class PoseTrackerClient {
 
   /**
    * WebView parity — the load-time gating of `TrackingAppV3`:
-   * - `blazepose` / `poseEngine` / other WebView-only keys → clear error
-   *   (this SDK ships MoveNet Lightning only);
+   * - `blazepose` / `poseEngine` / other WebView-only keys **as features
+   *   flags** → clear error (`options.model = 'blazepose'` is the supported
+   *   BlazePose path);
    * - developer features requested WITHOUT an API key → the front's exact
    *   "Invalid params… token=YOUR API_KEY…" message;
    * - plan `free` + angles/recommendations/progression → the front's exact
