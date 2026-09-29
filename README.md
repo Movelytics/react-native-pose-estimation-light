@@ -36,10 +36,10 @@ package stays tiny.
 download at session start.  
 **Choose light** when app install / OTA size matters and devices are online.
 
-Full comparison: [LIGHT_SDK.md](docs/LIGHT_SDK.md).
+Full comparison: [LIGHT_SDK.md](../../docs/LIGHT_SDK.md).
 
 **Agents:** shared UX/API/bugfixes → mirror to offline (or ask first). See
-[`DUAL_SDK_CHANGES.md`](docs/DUAL_SDK_CHANGES.md).
+[`DUAL_SDK_CHANGES.md`](../../docs/DUAL_SDK_CHANGES.md).
 
 ## Install
 
@@ -54,10 +54,10 @@ npx expo install react-native-webview expo-camera
 > **Offline sibling:** [`@pose-tracker/react-native-pose-estimation`](https://www.npmjs.com/package/@pose-tracker/react-native-pose-estimation)
 
 **Required:** host app must declare camera permissions — see
-[PERMISSIONS.md](docs/PERMISSIONS.md).
+[PERMISSIONS.md](../../docs/PERMISSIONS.md).
 
 **Media inputs (v0.2):** camera (default), uploaded video, still image — host
-picks the file. See [MEDIA_SOURCES.md](docs/MEDIA_SOURCES.md) and
+picks the file. See [MEDIA_SOURCES.md](../../docs/MEDIA_SOURCES.md) and
 https://docs.posetracker.com/media-sources.
 
 ## Quick start (keypoints — needs network, no API key)
@@ -144,11 +144,11 @@ Same contract as the offline SDK / web tracking URL:
 
 | Doc | Topic |
 |-----|--------|
-| [LIGHT_SDK.md](docs/LIGHT_SDK.md) | Offline vs light, sizes, model URL |
-| [PERMISSIONS.md](docs/PERMISSIONS.md) | Camera permission setup (required) |
-| [PRELOAD.md](docs/PRELOAD.md) | Preload / warm-up / lifecycle |
-| [FEATURES.md](docs/FEATURES.md) | Plan gating, watermark, loading text |
-| [EVENTS.md](docs/EVENTS.md) | Typed events + classic `onMessage` |
+| [LIGHT_SDK.md](../../docs/LIGHT_SDK.md) | Offline vs light, sizes, model URL |
+| [PERMISSIONS.md](../../docs/PERMISSIONS.md) | Camera permission setup (required) |
+| [PRELOAD.md](../../docs/PRELOAD.md) | Preload / warm-up / lifecycle |
+| [FEATURES.md](../../docs/FEATURES.md) | Plan gating, watermark, loading text |
+| [EVENTS.md](../../docs/EVENTS.md) | Typed events + classic `onMessage` |
 
 ## FAQ
 
