@@ -1,6 +1,6 @@
 {
   "name": "@pose-tracker/react-native-pose-estimation-light",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Human pose estimation SDK for React Native (light / online) — MoveNet Lightning via CDN + model URL each session, no bundled weights. iOS & Android (Expo Go). Optional API-key exercise engine.",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -20,6 +20,7 @@
   "scripts": {
     "build": "node scripts/sync-sdk-version.mjs && node scripts/embed-pose-runtime.mjs && tsc -p tsconfig.json && node scripts/copy-pose-runtime-source.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test \"test/*.test.cjs\"",
     "embed:runtime": "node scripts/embed-pose-runtime.mjs",
     "prepack": "npm run build",
     "pack:dry": "npm pack --dry-run"

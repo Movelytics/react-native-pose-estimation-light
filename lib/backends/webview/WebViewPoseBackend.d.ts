@@ -7,14 +7,16 @@
  * only one real-time across the whole Android park in Expo Go. Fully
  * offline: TF.js and the model ship inside the npm package (poseHtml.ts).
  *
- * The WebView owns the camera (`getUserMedia`). Frames are NOT pushed from
- * React Native — `estimatePose()` returns the latest pose posted by the page.
- * Mount {@link WebViewPoseView} (or a 1×1 warmer) to attach the runtime.
+ * By default the WebView owns the camera (`getUserMedia`) and
+ * `estimatePose()` returns the latest pose posted by the page. Mount
+ * {@link WebViewPoseView} (or a 1×1 warmer) to attach the runtime.
+ * Opt-in: {@link pushFrame} infers host-provided frames on a basic warmer.
  */
 import type { PoseBackend, PoseBackendInitOptions, PoseInputFrame } from '../PoseBackend';
 import type { Pose } from '../../types/pose';
 import type { AccelerationDiagnostics, AccelerationState, DiagnosticListener } from '../../types/acceleration';
 import type { PoseTrackerEvent } from '../../types/events';
+import type { ExternalFrame } from '../../types/externalFrame';
 export type WebViewPoseMessage = {
     type: 'ready';
     backend: string;
@@ -59,6 +61,13 @@ export type WebViewPoseMessage = {
     score: number;
     inferenceTimeMs: number;
     timestampMs: number;
+    /** Set when the pose answers a pushed external frame. */
+    frameId?: number;
+} | {
+    type: 'frame_result';
+    id: number;
+    dropped: boolean;
+    error?: string;
 } | {
     type: 'stats';
     fps: number;
@@ -172,6 +181,9 @@ export declare class WebViewPoseBackend implements PoseBackend {
     /** True after the page successfully opened getUserMedia. */
     private cameraOpened;
     private openCameraHandler;
+    private pushFrameHandler;
+    private frameSeq;
+    private readonly pendingFrames;
     private lastPose;
     private inferenceTimesMs;
     private medianInferenceMs;
@@ -192,11 +204,26 @@ export declare class WebViewPoseBackend implements PoseBackend {
     constructor(options?: WebViewPoseBackendOptions);
     /** Host view calls this when the WebView mounts / unmounts. */
     setAttached(attached: boolean): void;
+    isAttached(): boolean;
+    /** Model warm in the attached page (basic or full cold-start). */
+    isWarm(): boolean;
+    getLastPose(): Pose | null;
     setOnPose(handler: ((pose: Pose, inferenceTimeMs: number) => void) | undefined): void;
     setOnReady(handler: WebViewPoseBackendOptions['onReady']): void;
     setOnStats(handler: WebViewPoseBackendOptions['onStats']): void;
     /** Feed a message from the WebView `onMessage` handler. */
     handleMessage(raw: string): void;
+    /** Host view injects `__PT_PUSH_FRAME` with the JSON payload. */
+    setPushFrameHandler(handler: ((payload: string) => void) | undefined): void;
+    /**
+     * Infer one host-provided frame in the attached page. Resolves after the
+     * page posted the pose (already forwarded to `onPose`, hence the engine).
+     */
+    pushFrame(frame: ExternalFrame): Promise<{
+        dropped: boolean;
+        pose: Pose | null;
+    }>;
+    private rejectPendingFrames;
     init(_options: PoseBackendInitOptions): Promise<void>;
     warmup(): Promise<void>;
     /** Whether getUserMedia has already run in the attached page. */

@@ -133,6 +133,50 @@ Same contract as the offline SDK / web tracking URL:
 </PoseTrackerProvider>
 ```
 
+## External frames (your camera, our data)
+
+Full guide, including Vision Camera and expo-camera: https://docs.posetracker.com/external-frames
+
+Optional. Use it when your app already owns the camera (VisionCamera, a
+custom pipeline, a recorded file) and you only need the data. PoseTracker
+runs pose estimation and the exercise engine on every frame you push, and
+returns the same events as the camera flow: keypoints, posture/placement,
+counter, form score, progression. **Nothing is drawn**, so you render what you want.
+
+```tsx
+const { warmupExternal, startExercise, processFrame } = usePoseTracker({
+  onCounter: (e) => setReps(e.count), // listeners still fire
+});
+
+await warmupExternal(); // no camera permission, no getUserMedia
+startExercise('squat');
+
+// For each frame from your camera:
+const { dropped, pose, events } = await processFrame({
+  base64: jpegBase64, // or uri: 'file:///…' / 'data:image/jpeg;base64,…'
+  width: 256,
+  height: 192,
+  timestampMs: Date.now(),
+  mirrored: true, // front camera (default). false for the back camera.
+});
+if (!dropped) {
+  // pose.keypoints are normalized (0..1) to the frame you sent
+  // events: everything emitted for this frame (counter, posture, …)
+}
+```
+
+- The Provider mounts a hidden 1×1 warmer after `warmupExternal()`. It is not
+  needed if a `<WebViewPoseView />` is already on screen. The light package
+  still needs network for the model.
+- One frame in flight at a time: an overlapping call resolves at once with
+  `{ dropped: true, pose: lastPose, events: [] }`. Await before pushing the next one.
+- Keep the longest side of each frame at about 256 px or less. A 1080p JPEG per
+  frame is not real-time over the bridge.
+- The engine is temporal: push frames in order and keep the same session
+  across frames.
+- Don't mix the two flows. `processFrame` throws while the SDK camera is open.
+- `processFrame` before `warmupExternal()` throws.
+
 ## Cold-start
 
 | Mode | API | Camera permission |
@@ -168,6 +212,9 @@ offline MoveNet.
 
 **Who sees the watermark?**  
 Keyless and free plans. Hidden for paid plans.
+
+**How does Claude or Cursor integrate this SDK?**  
+Add the connector `https://mcp.posetracker.com/api/mcp`, sign in, and click Allow at `https://app.posetracker.com/oauth/authorize`. The agent writes the snippet on your account. Docs: https://docs.posetracker.com/ai/mcp-connector.
 
 ## License
 

@@ -81,7 +81,11 @@ export { DEFAULT_SKELETON_DEFINITION } from './types/skeleton';
 export { fetchSkeletonDefinition, SkeletonFetchError } from './api/skeleton';
 export type { FetchSkeletonOptions } from './api/skeleton';
 export { PoseTrackerProvider, usePoseTracker } from './PoseTrackerProvider';
-export type { PoseTrackerContextValue, PoseTrackerProviderProps } from './PoseTrackerProvider';
+export type {
+  PoseTrackerContextValue,
+  PoseTrackerProviderProps,
+  ProcessFrameFn,
+} from './PoseTrackerProvider';
 
 // Inference backends
 export type { PoseBackend, PoseBackendInitOptions, PoseInputFrame } from './backends/PoseBackend';
@@ -256,3 +260,4 @@ export type { PoseTrackerFeatures, ResolvedFeatures } from './types/features';
 export * from './types/events';
 export * from './types/manifest';
 export * from './types/pose';
+export * from './types/externalFrame';
