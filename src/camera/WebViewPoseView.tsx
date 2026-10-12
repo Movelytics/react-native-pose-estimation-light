@@ -16,6 +16,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
+  Linking,
   StyleSheet,
   Text,
   View,
@@ -28,6 +29,7 @@ import { WebViewPoseBackend } from '../backends/webview/WebViewPoseBackend';
 import {
   buildPoseHtml,
   DEFAULT_LOADING_TEXT,
+  WATERMARK_URL,
 } from '../backends/webview/poseHtml';
 import type { OnlineRuntimeParts } from '../backends/webview/onlineRuntime';
 import { getMinTargetFps, type QualityProfile } from '../quality/profiles';
@@ -471,7 +473,17 @@ export function WebViewPoseView(props: WebViewPoseViewProps): React.ReactElement
         // Skeleton is drawn inside the HTML — Android WebView often composites
         // above RN siblings, so PoseOverlay children are not visible there.
         onMessage={(event: { nativeEvent: { data: string } }) => {
-          wvBackend.handleMessage(event.nativeEvent.data);
+          const data = event.nativeEvent.data;
+          try {
+            const msg = JSON.parse(data) as { type?: string; url?: string };
+            if (msg?.type === 'posetracker_open_url' && msg.url === WATERMARK_URL) {
+              Linking.openURL(WATERMARK_URL).catch(() => undefined);
+              return;
+            }
+          } catch {
+            // Pose frames are JSON too; anything else still goes to the backend.
+          }
+          wvBackend.handleMessage(data);
         }}
         onError={(e: { nativeEvent: { description?: string } }) => {
           wvBackend.handleMessage(

@@ -8,6 +8,14 @@ Versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.7] — 2026-10-09
+
+### Changed
+
+- Freemium watermark now links to posetracker.com. Paid plans still hide it.
+
+Shipped on both `@pose-tracker/react-native-pose-estimation` and `@pose-tracker/react-native-pose-estimation-light`.
+
 ## [0.3.6] — 2026-10-02
 
 ### Added

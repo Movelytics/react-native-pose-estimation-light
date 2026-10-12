@@ -14,6 +14,8 @@ import type { OnlineRuntimeParts } from './onlineRuntime';
 export declare const POSE_HTML_BUILD = "20260921-blazeposeTfOpts";
 /** Default boot overlay copy (WebView `loading_message` parity). */
 export declare const DEFAULT_LOADING_TEXT = "AI Loading";
+/** Freemium watermark. Paid plans hide the element; the URL itself does not change. */
+export declare const WATERMARK_URL = "https://www.posetracker.com/?utm_source=watermark&utm_medium=react-native";
 export interface PoseHtmlOptions {
     facingMode?: 'user' | 'environment';
     /** Min keypoint score for the in-page skeleton. Default 0.25. */

@@ -106,8 +106,10 @@ The optional `#hud` FPS overlay is **off by default** (Android `perfDebug` /
 
 ### Watermark (plan-gated)
 
-On the live webcam overlay (bottom-right, above video/skeleton), a compact
-**powered by + join logo** watermark is shown for:
+On the live webcam overlay (bottom-right, above video/skeleton), a
+**Powered by PoseTracker** link is shown for free and keyless sessions.
+The link opens `https://www.posetracker.com/?utm_source=watermark&utm_medium=react-native`
+via `Linking.openURL`. Paid plans do not show it.
 
 | Plan | Watermark |
 |---|---|

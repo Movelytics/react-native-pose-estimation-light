@@ -28,6 +28,10 @@ export const POSE_HTML_BUILD = '20260921-blazeposeTfOpts';
 /** Default boot overlay copy (WebView `loading_message` parity). */
 export const DEFAULT_LOADING_TEXT = 'AI Loading';
 
+/** Freemium watermark. Paid plans hide the element; the URL itself does not change. */
+export const WATERMARK_URL =
+  'https://www.posetracker.com/?utm_source=watermark&utm_medium=react-native';
+
 export interface PoseHtmlOptions {
   facingMode?: 'user' | 'environment';
   /** Min keypoint score for the in-page skeleton. Default 0.25. */
@@ -138,22 +142,16 @@ const PAGE_CSS = `
     @keyframes ptspin { to { transform:rotate(360deg); } }
     #wm {
       position:absolute; right:10px; bottom:10px; z-index:3;
-      display:none; flex-direction:column; align-items:flex-end;
+      display:none; align-items:flex-end;
       pointer-events:none;
       text-shadow:0 1px 2px rgba(0,0,0,0.55);
     }
-    #wm.show { display:flex; }
-    #wm .wm-powered {
-      color:rgba(255,255,255,0.7);
-      font:600 11px/1.2 -apple-system,system-ui,sans-serif;
-      letter-spacing:0.12em;
-      text-transform:uppercase;
-      margin-bottom:4px;
-    }
-    #wm .wm-logo {
-      width:130px; height:auto; display:block;
-      opacity:0.92;
-      filter:drop-shadow(0 1px 2px rgba(0,0,0,0.45));
+    #wm.show { display:flex; pointer-events:auto; }
+    #wm a {
+      color:#fff;
+      font:600 12px/1.3 -apple-system,system-ui,sans-serif;
+      text-decoration:underline;
+      pointer-events:auto;
     }
     #hud {
       position:absolute; left:8px; right:8px; bottom:8px; z-index:3;
@@ -249,8 +247,7 @@ export function buildPoseHtml(parts: OnlineRuntimeParts, options?: PoseHtmlOptio
     '<img id="still" alt="" draggable="false" />',
     '<canvas id="overlay"></canvas>',
     '<div id="wm">',
-    '<div class="wm-powered">powered by</div>',
-    '<img class="wm-logo" alt="PoseTracker" src="', POSETRACKER_LOGO_DATA_URL, '" />',
+    '<a id="wm-link" href="', WATERMARK_URL, '" target="_blank" rel="noopener">Powered by PoseTracker</a>',
     '</div>',
     '<div id="boot">',
     '<div class="boot-powered">powered by</div>',
@@ -275,6 +272,7 @@ export function buildPoseHtml(parts: OnlineRuntimeParts, options?: PoseHtmlOptio
     ';window.__PT_PIPELINE_WASM_B64=null',
     ';</script>',
     '<script>', escapeScript(parts.runtimeJs), '</script>',
+    '<script>document.getElementById("wm-link").addEventListener("click",function(e){e.preventDefault();if(window.ReactNativeWebView&&window.ReactNativeWebView.postMessage){window.ReactNativeWebView.postMessage(JSON.stringify({type:"posetracker_open_url",url:this.href}));}});</script>',
     '</body></html>',
   ].join('');
 }
